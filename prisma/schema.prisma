@@ -1,0 +1,57 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AddressUnit {
+  id               String    @id @default(cuid())
+  zipCode          String
+  prefecture       String
+  city             String
+  chome            String?
+  banchi           String?
+  go               String?
+  buildingName     String?
+  room             String?
+  normalizationKey String    @db.Text
+  externalRef      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  eligibilities    Eligibility[]
+
+  @@index([zipCode])
+  @@index([city])
+}
+
+model Plan {
+  id           String        @id @default(cuid())
+  code         String        @unique
+  name         String
+  speedMbps    Int
+  monthlyPrice Int?
+  provider     String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  eligibilities Eligibility[]
+}
+
+model Eligibility {
+  id            String      @id @default(cuid())
+  addressUnitId String
+  planId        String
+  isEligible    Boolean
+  source        String?
+  checkedAt     DateTime    @default(now())
+
+  addressUnit   AddressUnit @relation(fields: [addressUnitId], references: [id], onDelete: Cascade)
+  plan          Plan        @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([addressUnitId, planId])
+  @@index([isEligible])
+}
