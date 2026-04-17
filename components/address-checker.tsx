@@ -37,6 +37,8 @@ export function AddressChecker() {
   const [zipCode, setZipCode] = useState('');
   const [zipSuggestions, setZipSuggestions] = useState<ZipItem[]>([]);
   const [selectedChome, setSelectedChome] = useState<ZipItem | null>(null);
+  const [zipLoading, setZipLoading] = useState(false);
+  const [zipChecked, setZipChecked] = useState(false);
 
   const [rawBanchi, setRawBanchi] = useState('');
   const [banchiSuggestions, setBanchiSuggestions] = useState<Array<{ buildingId: string; label: string }>>([]);
@@ -47,6 +49,27 @@ export function AddressChecker() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  async function fetchZipSuggestions(value: string) {
+    if (value.length < MIN_ZIP_LENGTH) {
+      setZipSuggestions([]);
+      setSelectedChome(null);
+      setZipChecked(false);
+      return;
+    }
+
+    setZipLoading(true);
+    setZipChecked(true);
+    try {
+      const res = await fetch(`/api/address/zipcode?zipCode=${value}`);
+      const json = await res.json();
+      setZipSuggestions(json.items ?? []);
+    } catch {
+      setZipSuggestions([]);
+    } finally {
+      setZipLoading(false);
+    }
+  }
+
   useEffect(() => {
     const sanitized = zipCode.replace(/\D/g, '').slice(0, 7);
     if (sanitized !== zipCode) {
@@ -54,20 +77,15 @@ export function AddressChecker() {
       return;
     }
 
-    if (sanitized.length !== MIN_ZIP_LENGTH) {
+    if (sanitized.length < MIN_ZIP_LENGTH) {
       setZipSuggestions([]);
       setSelectedChome(null);
+      setZipChecked(false);
       return;
     }
 
-    const timer = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/address/zipcode?zipCode=${sanitized}`);
-        const json = await res.json();
-        setZipSuggestions(json.items ?? []);
-      } catch {
-        setZipSuggestions([]);
-      }
+    const timer = setTimeout(() => {
+      void fetchZipSuggestions(sanitized);
     }, 220);
 
     return () => clearTimeout(timer);
@@ -165,6 +183,20 @@ export function AddressChecker() {
           value={zipCode}
           onChange={(e) => setZipCode(e.target.value)}
         />
+        <button
+          type="button"
+          onClick={() => void fetchZipSuggestions(zipCode)}
+          disabled={zipCode.length < MIN_ZIP_LENGTH || zipLoading}
+          className="mt-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+        >
+          {zipLoading ? 'Searching...' : 'Search Zipcode'}
+        </button>
+
+        {zipChecked && !zipLoading && zipSuggestions.length === 0 && (
+          <p className="mt-2 text-xs text-amber-700">
+            No address suggestions found for this zipcode. Please verify DB data/seed.
+          </p>
+        )}
 
         {zipSuggestions.length > 0 && (
           <ul className="mt-3 max-h-56 overflow-auto rounded-lg border border-slate-200 bg-white">
