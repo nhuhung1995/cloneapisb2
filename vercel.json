@@ -1,13 +1,13 @@
 {
   "functions": {
-    "api/**/*.js": {
+    "app/api/**/*.ts": {
       "maxDuration": 30
     }
   },
   "rewrites": [
     {
       "source": "/check-availability",
-      "destination": "/api/check-availability"
+      "destination": "/api/address/eligibility"
     }
   ]
 }

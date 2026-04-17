@@ -7,51 +7,120 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model AddressUnit {
-  id               String    @id @default(cuid())
-  zipCode          String
-  prefecture       String
-  city             String
-  chome            String?
-  banchi           String?
-  go               String?
-  buildingName     String?
-  room             String?
-  normalizationKey String    @db.Text
-  externalRef      String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+enum InfrastructureType {
+  VDSL
+  VDSL_G
+  FIBER_1G
+  FIBER_10G
+  AIR_5G
+}
 
-  eligibilities    Eligibility[]
+model Prefecture {
+  id               String   @id @default(cuid())
+  code             String   @unique
+  nameJa           String
+  nameKana         String?
+  normalizationKey String   @unique
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  cities           City[]
+}
+
+model City {
+  id               String      @id @default(cuid())
+  prefectureId     String
+  code             String?
+  nameJa           String
+  nameKana         String?
+  normalizationKey String
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  prefecture       Prefecture  @relation(fields: [prefectureId], references: [id], onDelete: Cascade)
+  chomes           Chome[]
+
+  @@unique([prefectureId, normalizationKey])
+  @@index([prefectureId])
+}
+
+model Chome {
+  id               String      @id @default(cuid())
+  cityId           String
+  zipCode          String
+  nameJa           String
+  chomeNumber      Int?
+  normalizationKey String
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  city             City        @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  banchis          Banchi[]
 
   @@index([zipCode])
-  @@index([city])
+  @@unique([cityId, normalizationKey, zipCode])
 }
 
-model Plan {
-  id           String        @id @default(cuid())
-  code         String        @unique
-  name         String
-  speedMbps    Int
-  monthlyPrice Int?
-  provider     String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+model Banchi {
+  id               String      @id @default(cuid())
+  chomeId          String
+  banchiNumber     String
+  goNumber         String?
+  normalizationKey String
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
 
-  eligibilities Eligibility[]
+  chome            Chome       @relation(fields: [chomeId], references: [id], onDelete: Cascade)
+  buildings        Building[]
+
+  @@index([chomeId])
+  @@unique([chomeId, normalizationKey])
 }
 
-model Eligibility {
-  id            String      @id @default(cuid())
-  addressUnitId String
-  planId        String
-  isEligible    Boolean
-  source        String?
-  checkedAt     DateTime    @default(now())
+model Building {
+  id               String                @id @default(cuid())
+  banchiId         String
+  nameJa           String?
+  roomPattern      String?
+  normalizationKey String
+  externalRef      String?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
 
-  addressUnit   AddressUnit @relation(fields: [addressUnitId], references: [id], onDelete: Cascade)
-  plan          Plan        @relation(fields: [planId], references: [id], onDelete: Cascade)
+  banchi           Banchi                @relation(fields: [banchiId], references: [id], onDelete: Cascade)
+  serviceAvailability ServiceAvailability[]
 
-  @@unique([addressUnitId, planId])
-  @@index([isEligible])
+  @@index([banchiId])
+  @@index([normalizationKey])
+}
+
+model ServicePlan {
+  id                String                @id @default(cuid())
+  code              String                @unique
+  name              String
+  provider          String
+  infrastructureType InfrastructureType
+  maxSpeedMbps      Int
+  monthlyPriceYen   Int?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  serviceAvailability ServiceAvailability[]
+}
+
+model ServiceAvailability {
+  id                String             @id @default(cuid())
+  buildingId        String
+  servicePlanId     String
+  infrastructureType InfrastructureType
+  isEligible        Boolean            @default(true)
+  reason            String?
+  scoreBoost        Float              @default(0)
+  checkedAt         DateTime           @default(now())
+
+  building          Building           @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  servicePlan       ServicePlan        @relation(fields: [servicePlanId], references: [id], onDelete: Cascade)
+
+  @@unique([buildingId, servicePlanId])
+  @@index([buildingId, isEligible])
 }

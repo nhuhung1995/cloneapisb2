@@ -1,156 +1,129 @@
-# Address Eligibility API (Vercel + Prisma)
+# Next.js Infrastructure Checker Clone (SoftBank-like Flow)
 
-Production-ready template for Japanese address matching and eligibility checks using:
+A production-oriented full-stack starter using **Next.js App Router + Prisma + PostgreSQL** to implement a Japanese address flow:
 
-- Vercel Serverless Functions (`/api`)
-- Prisma + PostgreSQL
-- Stateful step flow (`Zipcode -> Chome -> Banchi -> Room -> Eligibility`)
-- Fuzzy matching engine with weighted scoring
+`Zipcode -> Chome -> Banchi/Building Matching -> Eligibility`
 
-## Architecture
+## Tech Stack
 
-```text
-client
-  -> /api/flow/zipcode
-  -> /api/flow/chome
-  -> /api/flow/banchi
-  -> /api/flow/room
-  -> /check-availability (rewrite) -> /api/check-availability
-                         |
-                         +-> Prisma (PostgreSQL)
-                         +-> External Provider Adapter (optional)
-```
+- Next.js (App Router)
+- React + Tailwind CSS
+- Prisma + PostgreSQL (Neon/Supabase)
+- Vercel Serverless Functions (`app/api/...`)
 
-## Project Structure
+## Directory Structure
 
 ```text
 .
-├─ api/
-│  ├─ check-availability.js
-│  └─ flow/
-│     ├─ zipcode.js
-│     ├─ chome.js
-│     ├─ banchi.js
-│     └─ room.js
+├─ app/
+│  ├─ api/
+│  │  └─ address/
+│  │     ├─ zipcode/route.ts
+│  │     ├─ banchi-suggest/route.ts
+│  │     ├─ banchi-matching/route.ts
+│  │     └─ eligibility/route.ts
+│  ├─ globals.css
+│  ├─ layout.tsx
+│  └─ page.tsx
+├─ components/
+│  └─ address-checker.tsx
 ├─ lib/
-│  ├─ db.js
-│  ├─ external-provider.js
-│  ├─ http.js
-│  ├─ matching-logic.js
-│  ├─ normalize.js
-│  └─ session-store.js
+│  ├─ prisma.ts
+│  ├─ normalization.ts
+│  ├─ matching.ts
+│  └─ http.ts
 ├─ prisma/
 │  └─ schema.prisma
 ├─ .env.example
+├─ vercel.json
 ├─ package.json
-└─ vercel.json
+└─ tsconfig.json
 ```
 
-## Quick Start
+## API Routes
 
-1. Clone repository
+- `GET /api/address/zipcode?zipCode=3320034`
+  - Returns `prefecture/city/chome` list by zipcode.
+- `POST /api/address/banchi-matching`
+  - Input: `{ chomeId, rawBanchi }`
+  - Runs weighted matching with strong priority on house numbers.
+- `GET /api/address/banchi-suggest?chomeId=...&query=...`
+  - Returns real-time suggestions while user types banchi/building text.
+- `GET /api/address/eligibility?buildingId=...`
+  - Returns `eligible_plans` mapped from `ServiceAvailability`.
+
+## Setup
+
+1. Clone
 
 ```bash
 git clone https://github.com/nhuhung1995/cloneapisb2.git
 cd cloneapisb2
 ```
 
-2. Install dependencies
+2. Install
 
 ```bash
 npm install
 ```
 
-3. Configure environment
+3. Configure env
 
 ```bash
 cp .env.example .env
 ```
 
-4. Generate Prisma client and push schema
+4. Generate Prisma client + push schema
 
 ```bash
 npx prisma generate
 npx prisma db push
+npm run prisma:seed
 ```
 
-5. Run locally
+5. Run local
 
 ```bash
 npm run dev
 ```
 
-## API Endpoints
+## Database / Pooling Notes (Important on Vercel)
 
-- `POST /api/flow/zipcode`
-- `POST /api/flow/chome`
-- `POST /api/flow/banchi`
-- `POST /api/flow/room`
-- `POST /check-availability` (rewritten to `/api/check-availability`)
+Serverless functions can exhaust DB connections quickly. Use one of these:
 
-## Request/Response Example
+1. Neon pooled connection string.
+2. Supabase transaction pooler endpoint.
+3. Prisma Accelerate.
 
-`POST /check-availability`
+Use pooled connection in `DATABASE_URL` for production.
 
-```json
-{
-  "sessionId": "your-session-id",
-  "address": {
-    "zipCode": "3320034",
-    "prefecture": "埼玉県",
-    "city": "川口市",
-    "chome": "芝2丁目",
-    "banchi": "17",
-    "go": "6",
-    "buildingName": "サンプルマンション"
-  }
-}
-```
+## Vercel Deployment (One-click)
 
-Response
+1. Push to GitHub.
+2. In Vercel, import `nhuhung1995/cloneapisb2`.
+3. Set framework preset to **Next.js**.
+4. Add environment variables from `.env.example`.
+5. Deploy.
 
-```json
-{
-  "is_eligible": true,
-  "matching_score": 0.91,
-  "matched_address_id": "clx123...",
-  "suggested_plans": [
-    { "code": "HIKARI-1G", "name": "Hikari 1G", "speedMbps": 1000 }
-  ]
-}
-```
+## Data Model Highlights
 
-## Connection Pooling Notes (Important on Vercel)
+- Hierarchy tables: `Prefecture -> City -> Chome -> Banchi -> Building`
+- Availability table: `ServiceAvailability`
+- Infrastructure enum: `VDSL`, `VDSL_G`, `FIBER_1G`, `FIBER_10G`, `AIR_5G`
 
-Vercel Serverless can quickly exhaust direct PostgreSQL connections.
+## Matching Logic
 
-Recommended options:
+`/api/address/banchi-matching` applies weighted scoring:
 
-1. Prisma Accelerate
-2. Supabase Transaction Pooler (`pooler.supabase.com` endpoint)
-3. Neon pooled connection string
+- 75% weight: numeric house sequence (`banchi/go`) accuracy
+- 25% weight: normalized text similarity
 
-For PostgreSQL URL, use pooled connection in `DATABASE_URL`.
+This is resilient for mixed input like:
 
-## Deploy to GitHub + Vercel (1-click flow)
-
-1. Push code to your GitHub repo.
-2. Open Vercel dashboard and click **Add New Project**.
-3. Import `nhuhung1995/cloneapisb2`.
-4. Set environment variables from `.env.example`.
-5. Click **Deploy**.
-
-After first deploy:
-
-- Run `npx prisma db push` against production DB (from your CI/CD pipeline or local trusted environment).
-- Verify endpoint: `POST https://<your-domain>/check-availability`.
-
-## Security
-
-- Protect APIs with `x-api-key` header (`API_KEY`).
-- Never commit `.env`.
-- Restrict CORS at function level if exposing to browser clients.
+- `2-17`
+- `2丁目17番6号`
+- `２丁目１７番６号 レジデンス`
 
 ## License
 
-Private internal use.
+For internal and authorized use.
